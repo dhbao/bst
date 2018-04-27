@@ -22,7 +22,10 @@ class FileWriter
 public:
 	FileWriter(const QString& fileName_) : isOpen(false), file(fileName_) 
     {
-        isOpen=file.open(QIODevice::WriteOnly);
+        if(!fileName_.isEmpty())
+        {
+            isOpen=file.open(QIODevice::WriteOnly);
+        }
     }
 
 	~FileWriter()
@@ -37,7 +40,11 @@ public:
 	{
         if(isOpen)
         {
-            file.write(byteArray);//<----writeAll
+            qint64 bytesWritten=file.write(byteArray);
+            if(bytesWritten==-1 || bytesWritten<byteArray.size())
+            {
+                throw std::runtime_error(std::string("FileWriter.write() failed"));
+            }
         }
 	}
 
@@ -56,8 +63,7 @@ DataPage::DataPage(const PlatformStyle *platformStyle, QWidget *parent) :
     ui->txidStoreEdit->setEnabled(false);
     ui->storeMessageRadioButton->setChecked(true);
     connect(ui->storeButton, SIGNAL(clicked()), this, SLOT(store()));
-    
-    ui->fileRetrieveEdit->setEnabled(false);
+
     ui->messageRetrieveEdit->setReadOnly(true);
     ui->stringRadioButton->setChecked(true);
     connect(ui->retrieveButton, SIGNAL(clicked()), this, SLOT(retrieve()));
@@ -73,7 +79,7 @@ DataPage::~DataPage()
 
 void DataPage::fileRetrieveClicked()
 {
-    fileToRetrieveName = QFileDialog::getOpenFileName(this, tr("Open File"), "/home", tr("Files (*.dat *.bin *.pdf *.txt)"));
+    fileToRetrieveName = QFileDialog::getOpenFileName(this, tr("Open File"), "/home", tr("Files (*.*)"));
     ui->fileRetrieveEdit->setText(fileToRetrieveName);
 }
 
@@ -96,6 +102,11 @@ void DataPage::displayInBlocks(QPlainTextEdit* textEdit, const QString& inStr, i
     textEdit->setTextCursor(textCursor);
 }
 
+void DataPage::hex2bin(const QString& hex, QByteArray& bin)
+{
+    bin=QByteArray::fromHex(hex.toUtf8());    
+}
+
 void DataPage::retrieve()
 {
     try
@@ -116,17 +127,22 @@ void DataPage::retrieve()
             ui->messageRetrieveEdit->setPlainText(textValue);
         }
         
-        QByteArray dataHex=hexaValue.toUtf8();
-        QByteArray data=QByteArray::fromHex(dataHex);
-        QFile file(fileToRetrieveName);
-        file.open(QIODevice::WriteOnly);
-        file.write(data);
-        file.close();
+        QByteArray data;
+        hex2bin(hexaValue, data);
+        
+        FileWriter fileWriter(ui->fileRetrieveEdit->text());
+        fileWriter.write(data);
+    }
+    catch(std::exception const& e)
+    {
+        QMessageBox msgBox;
+        msgBox.setText(e.what());
+        msgBox.exec();
     }
     catch(...)
     {
         QMessageBox msgBox;
-        msgBox.setText("Exception occured");//<----przechwytywanie wyjatkow, lepszy popup, wyrownanie textlineedit, dodanie checkbox view/not view, obiekt do zapisania pliku
+        msgBox.setText("Unknown exception occured");
         msgBox.exec();
     }
 }
@@ -157,10 +173,16 @@ void DataPage::store()
             ui->txidStoreEdit->setText(str);
             ui->txidStoreEdit->displayText();
         }
+        catch(std::exception const& e)
+        {
+            QMessageBox msgBox;
+            msgBox.setText(e.what());
+            msgBox.exec();
+        }
         catch(...)
         {
             QMessageBox msgBox;
-            msgBox.setText("Exception occured");
+            msgBox.setText("Unknown exception occured");
             msgBox.exec();
         }
     }

@@ -42,6 +42,7 @@ private:
     
     const int blockSizeDisplay;
     void displayInBlocks(QPlainTextEdit* textEdit, const QString& inStr, int blockSize);
+    void hex2bin(const QString& hex, QByteArray& bin);
 
 private Q_SLOTS:
     void retrieve();
