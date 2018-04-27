@@ -8,6 +8,7 @@
 #include <qt/datapage.h>
 #include <qt/forms/ui_datapage.h>
 #include <qt/platformstyle.h>
+#include <qt/walletmodel.h>
 
 #ifdef ENABLE_WALLET
 #include <wallet/wallet.h>
@@ -16,6 +17,7 @@
 #include "../data/processunspent.h"
 #include "../data/retrievedatatxs.h"
 
+#include <qt/askpassphrasedialog.h>
 
 class FileWriter
 {
@@ -57,24 +59,31 @@ private:
 DataPage::DataPage(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent),
     ui(new Ui::DataPage),
+    walletModel(0),
     blockSizeDisplay(64)
 {
     ui->setupUi(this);
-    ui->txidStoreEdit->setEnabled(false);
-    ui->storeMessageRadioButton->setChecked(true);
-    connect(ui->storeButton, SIGNAL(clicked()), this, SLOT(store()));
-
+    
     ui->messageRetrieveEdit->setReadOnly(true);
     ui->stringRadioButton->setChecked(true);
     connect(ui->retrieveButton, SIGNAL(clicked()), this, SLOT(retrieve()));
     connect(ui->hexRadioButton, SIGNAL(clicked()), this, SLOT(hexRadioClicked()));
     connect(ui->stringRadioButton, SIGNAL(clicked()), this, SLOT(stringRadioClicked()));
     connect(ui->fileRetrieveButton, SIGNAL(clicked()), this, SLOT(fileRetrieveClicked()));
+    
+    ui->txidStoreEdit->setEnabled(false);
+    ui->storeMessageRadioButton->setChecked(true);
+    connect(ui->storeButton, SIGNAL(clicked()), this, SLOT(store()));
 }
 
 DataPage::~DataPage()
 {
     delete ui;
+}
+
+void DataPage::setModel(WalletModel *model)
+{
+    walletModel = model;
 }
 
 void DataPage::fileRetrieveClicked()
@@ -105,6 +114,16 @@ void DataPage::displayInBlocks(QPlainTextEdit* textEdit, const QString& inStr, i
 void DataPage::hex2bin(const QString& hex, QByteArray& bin)
 {
     bin=QByteArray::fromHex(hex.toUtf8());    
+}
+
+void DataPage::hexRadioClicked()
+{
+    displayInBlocks(ui->messageRetrieveEdit, hexaValue, blockSizeDisplay);
+}
+
+void DataPage::stringRadioClicked()
+{
+    ui->messageRetrieveEdit->setPlainText(textValue);
 }
 
 void DataPage::retrieve()
@@ -147,43 +166,48 @@ void DataPage::retrieve()
     }
 }
 
-void DataPage::hexRadioClicked()
-{
-    displayInBlocks(ui->messageRetrieveEdit, hexaValue, blockSizeDisplay);
-}
 
-void DataPage::stringRadioClicked()
-{
-    ui->messageRetrieveEdit->setPlainText(textValue);
-}
+
+
+
 
 void DataPage::store()
 {
 #ifdef ENABLE_WALLET
-    if(!vpwallets.empty())
+    if(walletModel)
     {
-        try
+        if(!vpwallets.empty())
         {
-            std::vector<std::string> addresses;
-            ProcessUnspent processUnspent(vpwallets[0], addresses);
-            UniValue utx(UniValue::VARR);
-            processUnspent.getUtxForAmount(utx, 0.0);
-            
-            const QString str=QString::fromStdString(getChangeAddress(vpwallets[0]));
-            ui->txidStoreEdit->setText(str);
-            ui->txidStoreEdit->displayText();
-        }
-        catch(std::exception const& e)
-        {
-            QMessageBox msgBox;
-            msgBox.setText(e.what());
-            msgBox.exec();
-        }
-        catch(...)
-        {
-            QMessageBox msgBox;
-            msgBox.setText("Unknown exception occured");
-            msgBox.exec();
+            try
+            {
+                std::vector<std::string> addresses;
+                ProcessUnspent processUnspent(vpwallets[0], addresses);
+                UniValue utx(UniValue::VARR);
+                processUnspent.getUtxForAmount(utx, 0.0);
+                
+                /*const QString str=QString::fromStdString(getChangeAddress(vpwallets[0]));
+                ui->txidStoreEdit->setText(str);
+                ui->txidStoreEdit->displayText();*/
+
+                if (walletModel->getEncryptionStatus() == WalletModel::Locked)
+                {
+                    AskPassphraseDialog dlg(AskPassphraseDialog::Unlock, this);
+                    dlg.setModel(walletModel);
+                    dlg.exec();
+                }
+            }
+            catch(std::exception const& e)
+            {
+                QMessageBox msgBox;
+                msgBox.setText(e.what());
+                msgBox.exec();
+            }
+            catch(...)
+            {
+                QMessageBox msgBox;
+                msgBox.setText("Unknown exception occured");
+                msgBox.exec();
+            }
         }
     }
 #endif

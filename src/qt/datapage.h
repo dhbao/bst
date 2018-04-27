@@ -7,6 +7,7 @@
 
 #include <QWidget>
 
+class WalletModel;
 class QPlainTextEdit;
 class PlatformStyle;
 
@@ -26,6 +27,7 @@ class DataPage : public QWidget
 public:
     explicit DataPage(const PlatformStyle *platformStyle, QWidget *parent = 0);
     ~DataPage();
+    void setModel(WalletModel *model);
 
 
 public Q_SLOTS:
@@ -36,6 +38,7 @@ Q_SIGNALS:
 
 private:
     Ui::DataPage *ui;
+    WalletModel *walletModel;
     QString hexaValue;
     QString textValue;
     QString fileToRetrieveName;
