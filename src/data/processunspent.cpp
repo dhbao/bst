@@ -2,18 +2,6 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
-/*for(CWalletRef pwallet : ::vpwallets) 
-{
-    if(pwallet->GetName() == requestedWallet) 
-    {
-        return pwallet;
-    }
-}
-if(pwallet==nullptr)
-{
-    throw std::runtime_error("requested wallet not found");
-}*/
-
 #include <core_io.h>
 #include <validation.h>
 #include <key_io.h>
@@ -91,16 +79,27 @@ ProcessUnspent::ProcessUnspent(const CWalletRef pwallet, const std::vector<std::
 
 ProcessUnspent::~ProcessUnspent() {}
 
-void ProcessUnspent::getUtxForAmount(UniValue& utx, double requiredAmount)
+bool ProcessUnspent::getUtxForAmount(UniValue& utx, double requiredAmount)
 {
+    bool isEnoughAmount=false;
+    double amount=0.0;
     size_t size=entryArray.size();
     for(size_t i=0;i<size;++i)
     {
-        if(entryArray[i][std::string("amount")].get_real()>=requiredAmount)
+        amount+=entryArray[i][std::string("amount")].get_real();
+        utx.push_back(entryArray[i]);
+        if(amount>=requiredAmount)
         {
-            utx.push_back(entryArray[i]);
+            isEnoughAmount=true;
+            break;
         }
     }
+    if(!isEnoughAmount)
+    {
+        utx.clear();
+    }
+    
+    return isEnoughAmount;
 }
 
 std::string getChangeAddress(const CWalletRef pwallet, OutputType output_type)

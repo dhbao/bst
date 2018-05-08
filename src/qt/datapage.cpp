@@ -2,6 +2,8 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include <sstream>
+#include <iomanip>
 #include <QMessageBox>
 #include <QFile>
 #include <QFileDialog>
@@ -9,15 +11,16 @@
 #include <qt/forms/ui_datapage.h>
 #include <qt/platformstyle.h>
 #include <qt/walletmodel.h>
+#include <qt/askpassphrasedialog.h>
 
+#include <validation.h>
 #ifdef ENABLE_WALLET
 #include <wallet/wallet.h>
 #endif
 
 #include "../data/processunspent.h"
 #include "../data/retrievedatatxs.h"
-
-#include <qt/askpassphrasedialog.h>
+#include "../data/storedatatxs.h"
 
 class FileWriter
 {
@@ -55,24 +58,60 @@ private:
 	QFile file;	
 };
 
+class FileReader
+{
+public:
+	FileReader(const QString& fileName_) : isOpen(false), file(fileName_) 
+    {
+        if(!fileName_.isEmpty())
+        {
+            isOpen=file.open(QIODevice::ReadOnly);
+        }
+    }
+
+	~FileReader()
+	{
+        if(isOpen)
+        {
+            file.close();
+        }
+	}
+
+	void read(QByteArray &byteArray)
+	{
+        if(isOpen)
+        {
+            byteArray=file.readAll();
+        }
+	}
+
+private:
+    bool isOpen;
+	QFile file;	
+};
 
 DataPage::DataPage(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent),
     ui(new Ui::DataPage),
     walletModel(0),
-    blockSizeDisplay(64)
+    blockSizeDisplay(64),
+    changeAddress("")
 {
     ui->setupUi(this);
-    
-    ui->messageRetrieveEdit->setReadOnly(true);
+
     ui->stringRadioButton->setChecked(true);
     connect(ui->retrieveButton, SIGNAL(clicked()), this, SLOT(retrieve()));
     connect(ui->hexRadioButton, SIGNAL(clicked()), this, SLOT(hexRadioClicked()));
     connect(ui->stringRadioButton, SIGNAL(clicked()), this, SLOT(stringRadioClicked()));
     connect(ui->fileRetrieveButton, SIGNAL(clicked()), this, SLOT(fileRetrieveClicked()));
-    
-    ui->txidStoreEdit->setEnabled(false);
-    ui->storeMessageRadioButton->setChecked(true);
+
+    ui->fileStoreEdit->setEnabled(false);
+    ui->txidStoreEdit->setReadOnly(true);
+    ui->storeMessageRadioButton->setChecked(true);    
+    connect(ui->storeMessageRadioButton, SIGNAL(clicked()), this, SLOT(storeMessageRadioClicked()));
+    connect(ui->storeFileRadioButton, SIGNAL(clicked()), this, SLOT(storeFileRadioClicked()));
+    connect(ui->storeFileHashRadioButton, SIGNAL(clicked()), this, SLOT(storeFileHashRadioClicked()));
+    connect(ui->fileStoreButton, SIGNAL(clicked()), this, SLOT(fileStoreClicked()));
     connect(ui->storeButton, SIGNAL(clicked()), this, SLOT(store()));
 }
 
@@ -168,46 +207,172 @@ void DataPage::retrieve()
 
 
 
+void DataPage::unlockWallet()
+{
+    if (walletModel->getEncryptionStatus() == WalletModel::Locked)
+    {
+        AskPassphraseDialog dlg(AskPassphraseDialog::Unlock, this);
+        dlg.setModel(walletModel);
+        dlg.exec();
+    }
+}
 
+void DataPage::fileStoreClicked()
+{
+    fileToStoreName = QFileDialog::getOpenFileName(this, tr("Open File"), "/home", tr("Files (*.*)"));
+    ui->fileStoreEdit->setText(fileToStoreName);
+}
 
+std::string DataPage::byte2str(const QByteArray& binaryData)
+{
+	const char hex[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B','C','D','E','F'};
+	std::string str;
+	for (int i = 0; i < binaryData.size(); ++i) 
+	{
+		const unsigned char ch = binaryData[i];
+		str.append(&hex[(ch  & 0xF0) >> 4], 1);
+		str.append(&hex[ch & 0xF], 1);
+	}
+	return str;
+}
+
+std::string DataPage::getHexStr()
+{
+    std::string retStr;
+    if(ui->storeMessageRadioButton->isChecked())
+    {
+        QString qs=ui->messageStoreEdit->toPlainText();
+        std::string str=qs.toUtf8().constData();
+        retStr = HexStr(str.begin(), str.end());
+    }
+    else if(ui->storeFileRadioButton->isChecked() || ui->storeFileHashRadioButton->isChecked())
+    {
+        QByteArray binaryData;
+        FileReader fileReader(ui->fileStoreEdit->text());
+        fileReader.read(binaryData);
+        
+        if(ui->storeFileRadioButton->isChecked())
+        {
+            retStr = byte2str(binaryData);
+        }
+        else if(ui->storeFileHashRadioButton->isChecked())
+        {
+            constexpr size_t hashSize=CSHA256::OUTPUT_SIZE;
+            unsigned char fileHash[hashSize];
+
+            CHash256 fileHasher;
+            
+            fileHasher.Write(reinterpret_cast<unsigned char*>(binaryData.data()), binaryData.size());
+            fileHasher.Finalize(fileHash);
+            
+            retStr = byte2str(QByteArray(reinterpret_cast<char*>(&fileHash[0]), static_cast<int>(hashSize)));
+        }
+    }
+    
+    return retStr;
+}
+
+void DataPage::storeMessageRadioClicked()
+{
+    ui->messageStoreEdit->setEnabled(true);
+    ui->fileStoreEdit->setEnabled(false);
+}
+
+void DataPage::storeFileRadioClicked()
+{
+    ui->messageStoreEdit->setEnabled(false);
+    ui->fileStoreEdit->setEnabled(true);
+}
+
+void DataPage::storeFileHashRadioClicked()
+{
+    ui->messageStoreEdit->setEnabled(false);
+    ui->fileStoreEdit->setEnabled(true);
+}
+
+double DataPage::computeFee(size_t dataSize)
+{
+    dataSize/=2;
+	constexpr size_t txEmptySize=145;
+	constexpr CAmount feeRate=10;
+	return static_cast<double>(txEmptySize+(::minRelayTxFee.GetFee(dataSize)*feeRate))/COIN;
+}
+
+std::string DataPage::double2str(double val)
+{
+    std::ostringstream strs;
+    strs << std::setprecision(9) << val;
+    return strs.str();
+}
+
+std::string DataPage::computeChange(const UniValue& inputs, double fee)
+{
+    double amount=0.0;
+    for(size_t i=0; i<inputs.size(); ++i)
+    {
+        amount+=inputs[i][std::string("amount")].get_real();
+    }
+
+    return double2str(amount-fee);
+}
 
 void DataPage::store()
 {
 #ifdef ENABLE_WALLET
     if(walletModel)
     {
-        if(!vpwallets.empty())
+        try
         {
-            try
+            if(!vpwallets.empty())
             {
-                std::vector<std::string> addresses;
-                ProcessUnspent processUnspent(vpwallets[0], addresses);
-                UniValue utx(UniValue::VARR);
-                processUnspent.getUtxForAmount(utx, 0.0);
-                
-                /*const QString str=QString::fromStdString(getChangeAddress(vpwallets[0]));
-                ui->txidStoreEdit->setText(str);
-                ui->txidStoreEdit->displayText();*/
+                const CWalletRef pwallet=vpwallets[0];
 
-                if (walletModel->getEncryptionStatus() == WalletModel::Locked)
+                std::vector<std::string> addresses;
+                ProcessUnspent processUnspent(pwallet, addresses);
+
+                std::string hexStr=getHexStr();
+                double fee=computeFee(hexStr.length());
+
+                UniValue inputs(UniValue::VARR);
+                if(!processUnspent.getUtxForAmount(inputs, fee))
                 {
-                    AskPassphraseDialog dlg(AskPassphraseDialog::Unlock, this);
-                    dlg.setModel(walletModel);
-                    dlg.exec();
+                    throw std::runtime_error(std::string("Insufficient funds"));
                 }
+
+                if(changeAddress.empty())
+                {
+                    changeAddress=getChangeAddress(pwallet);
+                }
+                
+                UniValue sendTo(UniValue::VOBJ);                
+                sendTo.pushKV(changeAddress, computeChange(inputs, fee));
+                sendTo.pushKV("data", hexStr);
+
+                StoreDataTxs storeDataTxs(pwallet, inputs, sendTo);
+                unlockWallet();
+                storeDataTxs.signTx();
+                std::string txid=storeDataTxs.sendTx().get_str();
+
+                QString qtxid=QString::fromStdString(txid);
+                ui->txidStoreEdit->setText(qtxid);
+                ui->txidStoreEdit->displayText();
             }
-            catch(std::exception const& e)
+            else
             {
-                QMessageBox msgBox;
-                msgBox.setText(e.what());
-                msgBox.exec();
+                throw std::runtime_error(std::string("No wallet found"));
             }
-            catch(...)
-            {
-                QMessageBox msgBox;
-                msgBox.setText("Unknown exception occured");
-                msgBox.exec();
-            }
+        }
+        catch(std::exception const& e)
+        {
+            QMessageBox msgBox;
+            msgBox.setText(e.what());
+            msgBox.exec();
+        }
+        catch(...)
+        {
+            QMessageBox msgBox;
+            msgBox.setText("Unknown exception occured");
+            msgBox.exec();
         }
     }
 #endif

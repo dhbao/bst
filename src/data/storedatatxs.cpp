@@ -32,12 +32,13 @@ UniValue StoreDataTxs::createDataTx(const UniValue& inputs, const UniValue& send
     }
     rawTx.nLockTime = nLockTime;
 
+    
     for (unsigned int idx = 0; idx < inputs.size(); idx++)
     {
         const UniValue& input = inputs[idx];
         const UniValue& o = input.get_obj();
 
-        uint256 txid = ParseHashO(o, "txid");//<----zastapic normalna funkcja
+        uint256 txid = ParseHashO(o, "txid");
 
         const UniValue& vout_v = find_value(o, "vout");
         if (!vout_v.isNum())

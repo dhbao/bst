@@ -15,7 +15,7 @@ public:
 				   int nMinDepth = 1, int nMaxDepth = 9999999, CAmount nMinimumAmount = 0, CAmount nMaximumAmount = MAX_MONEY,
 				   CAmount nMinimumSumAmount = MAX_MONEY, uint64_t nMaximumCount = 0);
 	~ProcessUnspent();
-	void getUtxForAmount(UniValue& utx, double requiredAmount);
+	bool getUtxForAmount(UniValue& utx, double requiredAmount);
 	
 private:
 	UniValue entryArray;
