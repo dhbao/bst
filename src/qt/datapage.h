@@ -5,6 +5,7 @@
 #ifndef BITCOIN_QT_DATAPAGE_H
 #define BITCOIN_QT_DATAPAGE_H
 
+#include <QFile>
 #include <QWidget>
 #include <univalue.h>
 
@@ -20,7 +21,6 @@ QT_BEGIN_NAMESPACE
 class QModelIndex;
 QT_END_NAMESPACE
 
-/** Overview ("home") page widget */
 class DataPage : public QWidget
 {
     Q_OBJECT
@@ -29,12 +29,6 @@ public:
     explicit DataPage(const PlatformStyle *platformStyle, QWidget *parent = 0);
     ~DataPage();
     void setModel(WalletModel *model);
-
-public Q_SLOTS:
-
-
-Q_SIGNALS:
-
 
 private:
     Ui::DataPage *ui;
@@ -65,6 +59,31 @@ private Q_SLOTS:
     void storeMessageRadioClicked();
     void storeFileRadioClicked();
     void storeFileHashRadioClicked();
+    
+private:
+    class FileWriter
+    {
+    public:
+        FileWriter(const QString& fileName);
+        ~FileWriter();
+        void write(const QByteArray &byteArray);
+
+    private:
+        bool isOpen;
+        QFile file;	
+    };
+
+    class FileReader
+    {
+    public:
+        FileReader(const QString& fileName);
+        ~FileReader();
+        void read(QByteArray &byteArray);
+
+    private:
+        bool isOpen;
+        QFile file;	
+    };
 };
 
 #endif // BITCOIN_QT_DATAPAGE_H

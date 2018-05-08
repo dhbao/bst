@@ -5,7 +5,6 @@
 #include <sstream>
 #include <iomanip>
 #include <QMessageBox>
-#include <QFile>
 #include <QFileDialog>
 #include <qt/datapage.h>
 #include <qt/forms/ui_datapage.h>
@@ -16,79 +15,12 @@
 #include <validation.h>
 #ifdef ENABLE_WALLET
 #include <wallet/wallet.h>
+#include <wallet/fees.h>
 #endif
 
 #include "../data/processunspent.h"
 #include "../data/retrievedatatxs.h"
 #include "../data/storedatatxs.h"
-
-class FileWriter
-{
-public:
-	FileWriter(const QString& fileName_) : isOpen(false), file(fileName_) 
-    {
-        if(!fileName_.isEmpty())
-        {
-            isOpen=file.open(QIODevice::WriteOnly);
-        }
-    }
-
-	~FileWriter()
-	{
-        if(isOpen)
-        {
-            file.close();
-        }
-	}
-
-	void write(const QByteArray &byteArray)
-	{
-        if(isOpen)
-        {
-            qint64 bytesWritten=file.write(byteArray);
-            if(bytesWritten==-1 || bytesWritten<byteArray.size())
-            {
-                throw std::runtime_error(std::string("FileWriter.write() failed"));
-            }
-        }
-	}
-
-private:
-    bool isOpen;
-	QFile file;	
-};
-
-class FileReader
-{
-public:
-	FileReader(const QString& fileName_) : isOpen(false), file(fileName_) 
-    {
-        if(!fileName_.isEmpty())
-        {
-            isOpen=file.open(QIODevice::ReadOnly);
-        }
-    }
-
-	~FileReader()
-	{
-        if(isOpen)
-        {
-            file.close();
-        }
-	}
-
-	void read(QByteArray &byteArray)
-	{
-        if(isOpen)
-        {
-            byteArray=file.readAll();
-        }
-	}
-
-private:
-    bool isOpen;
-	QFile file;	
-};
 
 DataPage::DataPage(const PlatformStyle *platformStyle, QWidget *parent) :
     QWidget(parent),
@@ -98,6 +30,18 @@ DataPage::DataPage(const PlatformStyle *platformStyle, QWidget *parent) :
     changeAddress("")
 {
     ui->setupUi(this);
+    
+    if (!platformStyle->getImagesOnButtons()) {
+        ui->fileRetrieveButton->setIcon(QIcon());
+        ui->fileStoreButton->setIcon(QIcon());
+        ui->retrieveButton->setIcon(QIcon());
+        ui->storeButton->setIcon(QIcon());
+    } else {
+        ui->fileRetrieveButton->setIcon(platformStyle->SingleColorIcon(":/icons/open"));
+        ui->fileStoreButton->setIcon(platformStyle->SingleColorIcon(":/icons/open"));
+        ui->retrieveButton->setIcon(platformStyle->SingleColorIcon(":/icons/filesave"));
+        ui->storeButton->setIcon(platformStyle->SingleColorIcon(":/icons/send"));
+    }
 
     ui->stringRadioButton->setChecked(true);
     connect(ui->retrieveButton, SIGNAL(clicked()), this, SLOT(retrieve()));
@@ -206,17 +150,6 @@ void DataPage::retrieve()
 }
 
 
-
-void DataPage::unlockWallet()
-{
-    if (walletModel->getEncryptionStatus() == WalletModel::Locked)
-    {
-        AskPassphraseDialog dlg(AskPassphraseDialog::Unlock, this);
-        dlg.setModel(walletModel);
-        dlg.exec();
-    }
-}
-
 void DataPage::fileStoreClicked()
 {
     fileToStoreName = QFileDialog::getOpenFileName(this, tr("Open File"), "/home", tr("Files (*.*)"));
@@ -295,7 +228,17 @@ double DataPage::computeFee(size_t dataSize)
     dataSize/=2;
 	constexpr size_t txEmptySize=145;
 	constexpr CAmount feeRate=10;
-	return static_cast<double>(txEmptySize+(::minRelayTxFee.GetFee(dataSize)*feeRate))/COIN;
+    return static_cast<double>(txEmptySize+(GetRequiredFee(dataSize)*feeRate))/COIN;
+}
+
+void DataPage::unlockWallet()
+{
+    if (walletModel->getEncryptionStatus() == WalletModel::Locked)
+    {
+        AskPassphraseDialog dlg(AskPassphraseDialog::Unlock, this);
+        dlg.setModel(walletModel);
+        dlg.exec();
+    }
 }
 
 std::string DataPage::double2str(double val)
@@ -376,4 +319,56 @@ void DataPage::store()
         }
     }
 #endif
+}
+
+DataPage::FileWriter::FileWriter(const QString& fileName_) : isOpen(false), file(fileName_) 
+{
+    if(!fileName_.isEmpty())
+    {
+        isOpen=file.open(QIODevice::WriteOnly);
+    }
+}
+
+DataPage::FileWriter::~FileWriter()
+{
+    if(isOpen)
+    {
+        file.close();
+    }
+}
+
+void DataPage::FileWriter::write(const QByteArray &byteArray)
+{
+    if(isOpen)
+    {
+        qint64 bytesWritten=file.write(byteArray);
+        if(bytesWritten==-1 || bytesWritten<byteArray.size())
+        {
+            throw std::runtime_error(std::string("FileWriter.write() failed"));
+        }
+    }
+}
+
+DataPage::FileReader::FileReader(const QString& fileName_) : isOpen(false), file(fileName_) 
+{
+    if(!fileName_.isEmpty())
+    {
+        isOpen=file.open(QIODevice::ReadOnly);
+    }
+}
+
+DataPage::FileReader::~FileReader()
+{
+    if(isOpen)
+    {
+        file.close();
+    }
+}
+
+void DataPage::FileReader::read(QByteArray &byteArray)
+{
+    if(isOpen)
+    {
+        byteArray=file.readAll();
+    }
 }
