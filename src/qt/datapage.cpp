@@ -122,6 +122,12 @@ void DataPage::retrieve()
         }
         else
         {
+            if(QByteArray::fromHex(hexaValue.toLatin1()).contains((char)0x00))
+            {
+                QMessageBox msgBox;
+                msgBox.setText("This message may be truncated. Please use a Hex type view");
+                msgBox.exec();
+            }
             ui->messageRetrieveEdit->setPlainText(textValue);
         }
 
@@ -161,7 +167,7 @@ std::string DataPage::getHexStr()
         
         if(str.length()>maxDataSize)
         {
-            throw std::runtime_error(strprintf("data size is grater than %d bytes", maxDataSize));
+            throw std::runtime_error(strprintf("Data size is grater than %d bytes", maxDataSize));
         }
 
         retStr = HexStr(str.begin(), str.end());
@@ -176,7 +182,7 @@ std::string DataPage::getHexStr()
         {
             if(binaryData.size()>maxDataSize)
             {
-                throw std::runtime_error(strprintf("data size is grater than %d bytes", maxDataSize));
+                throw std::runtime_error(strprintf("Data size is grater than %d bytes", maxDataSize));
             }
 
             retStr = byte2str(reinterpret_cast<const unsigned char* >(binaryData.data()), binaryData.size());
